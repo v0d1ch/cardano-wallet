@@ -83,8 +83,10 @@ module Cardano.Wallet.Shelley.Compatibility
       -- ** Stake pools
     , fromPoolId
     , fromPoolDistr
+    , mkStakePoolsSummary
     , fromNonMyopicMemberRewards
-    , optimumNumberOfPools
+    , RewardConstants
+    , rewardConstantsfromPParams
     , getProducer
 
     , HasNetworkId (..)
@@ -314,6 +316,7 @@ import qualified Ouroboros.Network.Point as Point
 import qualified Shelley.Spec.Ledger.API as SL
 import qualified Shelley.Spec.Ledger.API as SLAPI
 import qualified Shelley.Spec.Ledger.BlockChain as SL
+import qualified Shelley.Spec.Ledger.RewardProvenance as SL
 import qualified Shelley.Spec.Ledger.UTxO as SL
 
 --------------------------------------------------------------------------------
@@ -788,15 +791,56 @@ fromNonMyopicMemberRewards =
     . Map.mapKeys (bimap fromShelleyCoin fromStakeCredential)
     . O.unNonMyopicMemberRewards
 
-optimumNumberOfPools
-    :: HasField "_nOpt" pparams Natural
-    => pparams
-    -> Int
-optimumNumberOfPools = unsafeConvert . getField @"_nOpt"
+fromRewardProvenancePool
+    :: forall crypto. ()
+    => W.Coin
+    -> SL.RewardProvenancePool crypto
+    -> W.RewardProvenancePool
+fromRewardProvenancePool totalStake SL.RewardProvenancePool{..} =
+  W.RewardProvenancePool
+    { stakeRelative = unsafeMkPercentage sigmaP
+    , ownerPledge = toWalletCoin (SL._poolPledge poolParamsP)
+    , ownerStake = toWalletCoin ownerStakeP
+    , ownerStakeRelative = unsafeMkPercentage
+        $ fromIntegral (SL.unCoin ownerStakeP)
+        / fromIntegral (W.unCoin totalStake)
+    , cost = toWalletCoin (SL._poolCost poolParamsP)
+    , margin = fromUnitInterval (SL._poolMargin poolParamsP)
+    , performanceEstimate = unsafeMkPercentage appPerfP
+    }
+
+-- | Protocol constants required for reward calculation
+data RewardConstants = RewardConstants
+    { _nOpt :: Natural
+    , _a0   :: SL.NonNegativeInterval
+    }
+
+rewardConstantsfromPParams
+    :: ( HasField "_nOpt" pparams Natural
+    ,    HasField "_a0" pparams SL.NonNegativeInterval
+    ) => pparams
+    -> RewardConstants
+rewardConstantsfromPParams pp =
+    RewardConstants (getField @"_nOpt" pp) (getField @"_a0" pp)
+
+mkStakePoolsSummary
+    :: RewardConstants
+    -> SL.RewardProvenance StandardCrypto
+    -> W.StakePoolsSummary
+mkStakePoolsSummary RewardConstants{_a0,_nOpt} SL.RewardProvenance{totalStake,pools,r}
+  = W.StakePoolsSummary
+    { rewardParams = rp
+    , pools
+        = Map.map (fromRewardProvenancePool $ toWalletCoin totalStake)
+        $ Map.mapKeys fromPoolId pools
+    }
   where
-    -- A value of ~100 can be expected, so should be fine.
-    unsafeConvert :: Natural -> Int
-    unsafeConvert = fromIntegral
+    rp = W.RewardParams 
+        { nOpt = fromIntegral _nOpt
+        , a0   = fromNonNegativeInterval _a0
+        , r    = toWalletCoin r
+        , totalStake = toWalletCoin totalStake
+        }
 
 --
 -- Txs
@@ -1187,6 +1231,9 @@ fromUnitInterval x =
   where
     bomb = internalError $
         "fromUnitInterval: encountered invalid parameter value: "+||x||+""
+
+fromNonNegativeInterval :: SL.NonNegativeInterval -> Rational
+fromNonNegativeInterval = SL.unboundRational
 
 -- | SealedTx are the result of rightfully constructed shelley transactions so, it
 -- is relatively safe to unserialize them from CBOR.
