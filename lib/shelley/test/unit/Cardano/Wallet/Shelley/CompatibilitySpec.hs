@@ -102,7 +102,7 @@ import Codec.Binary.Encoding
 import Control.Monad
     ( forM_ )
 import Data.ByteArray.Encoding
-    ( Base (..), convertToBase )
+    ( Base (..), convertFromBase, convertToBase )
 import Data.ByteString
     ( ByteString )
 import Data.ByteString.Base58
@@ -170,6 +170,8 @@ import qualified Codec.Binary.Bech32 as Bech32
 import qualified Data.ByteString as BS
 import qualified Data.Text.Encoding as T
 import qualified Shelley.Spec.Ledger.PParams as SL
+
+import qualified Debug.Trace as TR
 
 spec :: Spec
 spec = do
@@ -370,6 +372,42 @@ spec = do
 
         forM_ matrix $ \(title, addr, predicate) ->
             it title $ inspectAddress addr `shouldSatisfy` predicate
+
+    describe "deserialize cborHash" $ do
+        -- Cases below are taken straight from cardano-addresses. We don't go in
+        -- depth with testing here because this is already tested on
+        -- cardano-addresses.
+        let matrix =
+                [ ( "multiple-output tx with no inputs missing"
+                  , "84a600818258200eaa33be8780935ca5a7c1e628a2d54402446f96236c\
+                    \a8f1770e07fa22ba8648000d80018482583901a65f0e7aea387adbc109\
+                    \123a571cfd8d0d139739d359caaf966aa5b9a062de6ec013404d4f9909\
+                    \877d452fc57dfe4f8b67f94e0ea1e8a0ba1a000f422a82583901ac9a56\
+                    \280ec283eb7e12146726bfe68dcd69c7a85123ce2f7a10e7afa062de6e\
+                    \c013404d4f9909877d452fc57dfe4f8b67f94e0ea1e8a0ba1a000f422a\
+                    \825839011a2f2f103b895dbe7388acc9cc10f90dc4ada53f46c841d2ac\
+                    \44630789fc61d21ddfcbd4d43652bf05c40c346fa794871423b65052d7\
+                    \614c1b0000000ba42b176a82583901c59701fee28ad31559870ecd6ea9\
+                    \2b143b1ce1b68ccb62f8e8437b3089fc61d21ddfcbd4d43652bf05c40c\
+                    \346fa794871423b65052d7614c1b0000000ba42b176a021a000234d803\
+                    \198ceb0e80a0f5f6"
+                  )
+                , ( "single-output tx with inputs missing"
+                  , "84a600818258200eaa33be8780935ca5a7c1e628a2d54402446f96236c\
+                    \a8f1770e07fa22ba86480d0d800182825839010acce4f85ade867308f0\
+                    \48fe4516c0383b38cc04602ea6f7a6a1e75f29450899547b0e4bb19413\
+                    \2452d45fea30212aebeafc69bca8744ea61a002dc67e8258390110a9b4\
+                    \666ba80e4878491d1ac20465c9893a8df5581dc705770626203d4d23fe\
+                    \6a7acdda5a1b41f56100f02bfa270a3c560c4e55cf8312331b00000017\
+                    \484721ca021a0001ffb803198d280e80a0f5f6"
+                  )
+                ]
+
+        forM_ matrix $ \(title, bs) -> do
+            let (Right txFromCBOR) = Cardano.deserialiseFromCBOR (Cardano.AsTx Cardano.AsAlonzoEra) (unsafeFromBase16 bs)
+            let envelope = Cardano.serialiseToTextEnvelope Nothing txFromCBOR
+            let (Right txFromTextEnvelope) = Cardano.deserialiseFromTextEnvelope (Cardano.proxyToAsType Proxy) envelope
+            it title $ txFromCBOR `shouldBe` txFromTextEnvelope
 
     describe "golden tests for script hashes for different versions" $ do
         testScriptsAllLangs Cardano.SimpleScriptV1
@@ -829,6 +867,11 @@ instance Arbitrary (VariableSize128 TokenBundle) where
 
 base16 :: ByteString -> Text
 base16 = T.decodeUtf8 . convertToBase Base16
+
+unsafeFromBase16 :: Text -> ByteString
+unsafeFromBase16 txt =
+    let (Right bs) = convertFromBase Base16 $ T.encodeUtf8 txt
+    in bs
 
 bech32 :: ByteString -> Text
 bech32 = Bech32.encodeLenient hrp . Bech32.dataPartFromBytes

@@ -72,6 +72,7 @@ module Cardano.Wallet.Api.Server
     , postRandomWallet
     , postRandomWalletFromXPrv
     , signTransaction
+    , balanceTransaction
     , postTransactionOld
     , postTransactionFeeOld
     , postTrezorWallet
@@ -131,6 +132,7 @@ import Cardano.Mnemonic
     ( SomeMnemonic )
 import Cardano.Wallet
     ( ErrAddCosignerKey (..)
+    , ErrBalanceTx (..)
     , ErrConstructSharedWallet (..)
     , ErrConstructTx (..)
     , ErrCreateMigrationPlan (..)
@@ -193,6 +195,7 @@ import Cardano.Wallet.Api.Types
     , ApiActiveSharedWallet (..)
     , ApiAddress (..)
     , ApiAsset (..)
+    , ApiBalanceTransactionPostData
     , ApiBlockInfo (..)
     , ApiBlockReference (..)
     , ApiByronWallet (..)
@@ -205,10 +208,11 @@ import Cardano.Wallet.Api.Types
     , ApiCoinSelectionOutput (..)
     , ApiCoinSelectionWithdrawal (..)
     , ApiConstructTransaction (..)
-    , ApiConstructTransactionData
+    , ApiConstructTransactionData (..)
     , ApiEpochInfo (ApiEpochInfo)
     , ApiEra (..)
     , ApiErrorCode (..)
+    , ApiExternalInput (..)
     , ApiFee (..)
     , ApiForeignStakeKey (..)
     , ApiMintedBurnedTransaction (..)
@@ -243,6 +247,7 @@ import Cardano.Wallet.Api.Types
     , ApiTxId (..)
     , ApiTxInput (..)
     , ApiTxMetadata (..)
+    , ApiTxOut (..)
     , ApiUtxoStatistics (..)
     , ApiWallet (..)
     , ApiWalletAssetsBalance (..)
@@ -411,7 +416,7 @@ import Cardano.Wallet.Primitive.Types
 import Cardano.Wallet.Primitive.Types.Address
     ( Address (..), AddressState (..) )
 import Cardano.Wallet.Primitive.Types.Coin
-    ( Coin (..), coinQuantity )
+    ( Coin (..), coinQuantity, sumCoins )
 import Cardano.Wallet.Primitive.Types.Hash
     ( Hash (..) )
 import Cardano.Wallet.Primitive.Types.RewardAccount
@@ -449,7 +454,7 @@ import Cardano.Wallet.Transaction
     , ErrCannotQuit (..)
     , ErrMkTransaction (..)
     , TransactionCtx (..)
-    , TransactionLayer
+    , TransactionLayer (..)
     , Withdrawal (..)
     , defaultTransactionCtx
     )
@@ -2016,6 +2021,60 @@ postTransactionFeeOld ctx (ApiT wid) body = do
         minCoins <- liftIO (W.calcMinimumCoinValues @_ @k wrk outs)
         liftHandler $ mkApiFee Nothing minCoins <$> W.estimateFee runSelection
 
+balanceTransaction
+    :: forall ctx s k (n :: NetworkDiscriminant).
+        ( ctx ~ ApiLayer s k
+        , IsOwned s k
+        , WalletKey k
+        , GetRewardAccount s k
+        , HardDerivation k
+        , GenChange s
+        , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
+        )
+    => Proxy n
+    -> ctx
+    -> ConstructTransactionConfig s IO
+    -> ApiT WalletId
+    -> ApiBalanceTransactionPostData n
+    -> Handler (ApiConstructTransaction n)
+balanceTransaction _ ctx config (ApiT wid) body =
+    if areOutputsCovered tx then
+        liftHandler $ throwE ErrBalanceTxAllOutputsCovered
+    else
+        constructTransaction ctx config (ApiT wid) $
+        toApiConstructTransactionData tx
+  where
+    toApiConstructTransactionData (Tx _ _ _ outs wdrlM mdM) = ApiConstructTransactionData
+        { payments = toApiPaymentDesination outs --TODO in ADP-656 - I need to decrease by inputs already present?
+        , withdrawal = toApiWdrl wdrlM
+        , metadata = ApiT <$> mdM
+        , mint = Nothing
+        , delegations = Nothing
+        , validityInterval = Nothing
+        }
+    toApiWdrl :: Map RewardAccount Coin -> Maybe ApiWithdrawalPostData
+    toApiWdrl _ = Nothing --TODO in ADP-656 - I need to lookup the wallet rewardAcct against this map?
+    toApiPaymentDesination = \case
+        [] -> Nothing
+        txouts -> Just $ ApiPaymentAddresses $ NE.fromList $ toAddressAmount <$> txouts
+    toAddressAmount :: TxOut -> AddressAmount (ApiT Address, Proxy n)
+    toAddressAmount (TxOut addr (TokenBundle coin tokenMap)) = AddressAmount
+        { address = (ApiT addr, Proxy)
+        , amount = Quantity $ fromIntegral (unCoin coin)
+        , assets = ApiT tokenMap
+        }
+
+    areOutputsCovered (Tx _ feeM _ outs _ _) = -- TODO in ADP-656 is it correct- double check
+        Coin (fromIntegral appliedTxOut) ==
+        sumCoins [fromMaybe (Coin 0) feeM, sumCoins $ txOutCoin <$> outs]
+
+    apiExternalInps = body ^. #inputs
+    getAmtFromExternalInps (ApiExternalInput _ (ApiTxOut _ _ (Quantity amt) _)) = amt
+    appliedTxOut = sum $ getAmtFromExternalInps <$> apiExternalInps
+    sealedTxIncoming = body ^. #transaction . #getApiT
+    tx = decodeTx tl sealedTxIncoming
+    tl = ctx ^. W.transactionLayer @k
+
 data ConstructTransactionConfig s m = ConstructTransactionConfig
     { genChange :: ArgGenChange s
     , getKnownPools :: m (Set PoolId)
@@ -3473,6 +3532,14 @@ instance IsServerError ErrConstructTx where
 instance IsServerError ErrMintBurnAssets where
     toServerError = \case
         ErrMintBurnNotImplemented msg -> apiError err501 NotImplemented msg
+
+instance IsServerError ErrBalanceTx where
+    toServerError = \case
+        ErrBalanceTxAllOutputsCovered ->
+            apiError err403 OutputsAlreadyCovered $ mconcat
+                [ "The transaction to be balanced has already all outputs covered. "
+                , "Please send a transaction that requires more inputs to be picked to be balanced."
+                ]
 
 instance IsServerError ErrRemoveTx where
     toServerError = \case
