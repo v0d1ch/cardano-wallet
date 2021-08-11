@@ -2045,7 +2045,7 @@ balanceTransaction _ ctx config (ApiT wid) body =
         toApiConstructTransactionData tx
   where
     toApiConstructTransactionData (Tx _ _ _ outs wdrlM mdM) = ApiConstructTransactionData
-        { payments = toApiPaymentDesination outs --TODO in ADP-656 - I need to decrease by inputs already present?
+        { payments = toApiPaymentDesination (snd $ outsAdjusted outs)
         , withdrawal = toApiWdrl wdrlM
         , metadata = ApiT <$> mdM
         , mint = Nothing
@@ -2067,6 +2067,14 @@ balanceTransaction _ ctx config (ApiT wid) body =
     areOutputsCovered (Tx _ feeM _ outs _ _) = -- TODO in ADP-656 is it correct- double check
         Coin (fromIntegral appliedTxOut) ==
         sumCoins [fromMaybe (Coin 0) feeM, sumCoins $ txOutCoin <$> outs]
+
+    --TODO in ADP-656 - this will be replaced with coin selection addressing external inputs
+    updateTxOut (TxOut addr (TokenBundle (Coin amt) tokenMap)) (coinToSubstractLeft, acc) =
+        if amt > coinToSubstractLeft then
+            (0, (TxOut addr (TokenBundle (Coin $ amt - coinToSubstractLeft) tokenMap)):acc)
+        else
+            (coinToSubstractLeft - amt, acc)
+    outsAdjusted = foldr updateTxOut (fromIntegral appliedTxOut, [])
 
     apiExternalInps = body ^. #inputs
     getAmtFromExternalInps (ApiExternalInput _ (ApiTxOut _ _ (Quantity amt) _)) = amt
