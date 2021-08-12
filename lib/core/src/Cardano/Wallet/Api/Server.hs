@@ -2040,9 +2040,15 @@ balanceTransaction
 balanceTransaction _ ctx config (ApiT wid) body =
     if areOutputsCovered tx then
         liftHandler $ throwE ErrBalanceTxAllOutputsCovered
-    else
-        constructTransaction ctx config (ApiT wid) $
-        toApiConstructTransactionData tx
+    else do
+        ApiConstructTransaction _ cs _ <-
+            constructTransaction ctx config (ApiT wid) $ toApiConstructTransactionData tx
+        let (sealedTxOutcoming, fee) = updateTx tl sealedTxIncoming (getInpsChange cs)
+        pure $ ApiConstructTransaction
+            { transaction = ApiT sealedTxOutcoming
+            , coinSelection = cs
+            , fee = Quantity $ fromIntegral fee
+            }
   where
     toApiConstructTransactionData (Tx _ _ _ outs wdrlM mdM) = ApiConstructTransactionData
         { payments = toApiPaymentDesination (snd $ outsAdjusted outs)
@@ -2064,10 +2070,17 @@ balanceTransaction _ ctx config (ApiT wid) body =
         , assets = ApiT tokenMap
         }
 
+    toTxIn (ApiCoinSelectionInput (ApiT txid) ix _ _ _ _) =
+        TxIn txid ix
+    toTxOut (ApiCoinSelectionChange (ApiT addr,_) (Quantity amt) (ApiT assets) _) =
+        TxOut addr (TokenBundle (Coin $ fromIntegral amt) assets)
+    getInpsChange cs =
+        ( map toTxIn $ NE.toList $ cs ^. #inputs
+        , map toTxOut $ cs ^. #change)
+
     areOutputsCovered (Tx _ feeM _ outs _ _) = -- TODO in ADP-656 is it correct- double check
         Coin (fromIntegral appliedTxOut) ==
         sumCoins [fromMaybe (Coin 0) feeM, sumCoins $ txOutCoin <$> outs]
-
     --TODO in ADP-656 - this will be replaced with coin selection addressing external inputs
     updateTxOut (TxOut addr (TokenBundle (Coin amt) tokenMap)) (coinToSubstractLeft, acc) =
         if amt > coinToSubstractLeft then
