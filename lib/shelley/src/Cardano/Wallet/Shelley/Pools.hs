@@ -367,6 +367,7 @@ oneMinus :: Percentage -> Percentage
 oneMinus p = unsafeMkPercentage $ 1 - getPercentage p
 
 proportionTo :: Coin -> Coin -> Rational
+proportionTo _        (Coin 0) = 0
 proportionTo (Coin x) (Coin y) = fromIntegral x / fromIntegral y
 
 z0 :: RewardParams -> Rational

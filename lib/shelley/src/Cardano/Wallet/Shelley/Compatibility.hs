@@ -803,11 +803,14 @@ fromRewardProvenancePool totalStake SL.RewardProvenancePool{..} =
     , ownerStake = toWalletCoin ownerStakeP
     , ownerStakeRelative = unsafeMkPercentage
         $ fromIntegral (SL.unCoin ownerStakeP)
-        / fromIntegral (W.unCoin totalStake)
+          `proportionTo` fromIntegral (W.unCoin totalStake)
     , cost = toWalletCoin (SL._poolCost poolParamsP)
     , margin = fromUnitInterval (SL._poolMargin poolParamsP)
     , performanceEstimate = unsafeMkPercentage appPerfP
     }
+  where
+    proportionTo _ 0 = 0
+    proportionTo x y = x / y
 
 -- | Protocol constants required for reward calculation
 data RewardConstants = RewardConstants
