@@ -319,7 +319,12 @@ newTransactionLayer networkId = TransactionLayer
     , constraints = \pp -> txConstraints pp (txWitnessTagFor @k)
 
     , decodeTx = _decodeSealedTx
+
+    , updateTx = _updateSealedTx
     }
+
+_updateSealedTx :: SealedTx -> ([TxIn], [TxOut]) -> (SealedTx, Word64)
+_updateSealedTx tx _ = (tx, 0)
 
 _decodeSealedTx :: SealedTx -> Tx
 _decodeSealedTx (cardanoTx -> InAnyCardanoEra _era tx) = fromCardanoTx tx

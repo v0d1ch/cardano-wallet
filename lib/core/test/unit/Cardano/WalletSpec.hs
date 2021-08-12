@@ -1321,6 +1321,8 @@ dummyTransactionLayer = TransactionLayer
         error "dummyTransactionLayer: constraints not implemented"
     , decodeTx = \_sealed ->
         Tx (Hash "") Nothing mempty mempty mempty mempty mempty mempty Nothing
+    , updateTx = \_sealed _insAndOuts ->
+            Tx (Hash "") Nothing mempty mempty mempty mempty mempty mempty Nothing
     }
 
 makeSealedTx :: Tx -> [(XPrv, Passphrase "encryption")] -> SealedTx

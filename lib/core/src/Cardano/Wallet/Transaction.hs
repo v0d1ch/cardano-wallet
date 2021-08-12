@@ -87,6 +87,8 @@ import Data.Text
     ( Text )
 import Data.Text.Class
     ( ToText (..) )
+import Data.Word
+    ( Word64 )
 import Fmt
     ( Buildable (..), blockMapF, genericF, listF' )
 import GHC.Generics
@@ -134,9 +136,9 @@ data TransactionLayer k tx = TransactionLayer
 
     , computeSelectionLimit
         :: ProtocolParameters
-        -> TransactionCtx
-        -> [TxOut]
-        -> SelectionLimit
+        -- Current protocol parameters.
+        -> TxConstraints
+        -- The set of constraints that apply to all transactions.
 
     , tokenBundleSizeAssessor :: TokenBundleMaxSize -> TokenBundleSizeAssessor
     -- ^ A function to assess the size of a token bundle.
@@ -145,8 +147,16 @@ data TransactionLayer k tx = TransactionLayer
     -- ^ The set of constraints that apply to all transactions, given the
     -- current protocol parameters.
 
-    , decodeTx :: tx -> Tx
-    -- ^ Decode an externally-created transaction.
+    , decodeTx
+        :: tx
+        -> Tx
+        -- ^ Decode an externally-signed transaction to the chain producer
+
+    , updateTx
+        :: tx
+        -> ( [TxIn], [TxOut] )
+        -> (tx, Word64)
+        -- ^ Update tx by adding additional inputs and outputs and give recalculated fee
     }
     deriving Generic
 
