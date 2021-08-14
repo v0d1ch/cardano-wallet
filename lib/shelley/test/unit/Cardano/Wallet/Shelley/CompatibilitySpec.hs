@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -38,7 +39,11 @@ import Cardano.Mnemonic
     , entropyToMnemonic
     )
 import Cardano.Wallet.Api.Types
-    ( DecodeAddress (..), DecodeStakeAddress (..), EncodeStakeAddress (..) )
+    ( ApiBalanceTransactionPostData
+    , DecodeAddress (..)
+    , DecodeStakeAddress (..)
+    , EncodeStakeAddress (..)
+    )
 import Cardano.Wallet.Byron.Compatibility
     ( maryTokenBundleMaxSize )
 import Cardano.Wallet.Primitive.AddressDerivation
@@ -101,6 +106,8 @@ import Codec.Binary.Encoding
     ( fromBase16 )
 import Control.Monad
     ( forM_ )
+import Data.Aeson
+    ( eitherDecode )
 import Data.ByteArray.Encoding
     ( Base (..), convertFromBase, convertToBase )
 import Data.ByteString
@@ -127,6 +134,8 @@ import GHC.TypeLits
     ( natVal )
 import Ouroboros.Network.Block
     ( BlockNo (..), Point, SlotNo (..), Tip (..), getTipPoint )
+import System.FilePath
+    ( (</>) )
 import Test.Hspec
     ( Spec, describe, it, shouldBe, shouldSatisfy )
 import Test.Hspec.Core.Spec
@@ -156,6 +165,10 @@ import Test.QuickCheck
     )
 import Test.QuickCheck.Monadic
     ( assert, monadicIO, monitor, run )
+import Test.Utils.Paths
+    ( getTestData )
+import UnliftIO.Exception
+    ( evaluate, tryJust )
 
 import qualified Cardano.Api as Cardano
 import qualified Cardano.Ledger.Address as SL
@@ -168,10 +181,9 @@ import qualified Cardano.Wallet.Primitive.Types as W
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
 import qualified Codec.Binary.Bech32 as Bech32
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.Encoding as T
 import qualified Shelley.Spec.Ledger.PParams as SL
-
-import qualified Debug.Trace as TR
 
 spec :: Spec
 spec = do
@@ -374,9 +386,6 @@ spec = do
             it title $ inspectAddress addr `shouldSatisfy` predicate
 
     describe "deserialize cborHash" $ do
-        -- Cases below are taken straight from cardano-addresses. We don't go in
-        -- depth with testing here because this is already tested on
-        -- cardano-addresses.
         let matrix =
                 [ ( "multiple-output tx with no inputs missing"
                   , "84a600818258200eaa33be8780935ca5a7c1e628a2d54402446f96236c\
@@ -657,6 +666,24 @@ spec = do
             let envelope = Cardano.serialiseToTextEnvelope Nothing txFromCBOR
             let (Right txFromTextEnvelope) = Cardano.deserialiseFromTextEnvelope (Cardano.proxyToAsType Proxy) envelope
             it title $ txFromCBOR `shouldBe` txFromTextEnvelope
+
+    -- ADP-656 idea is here to decode every plutus example and try to Server.balanceTransaction
+    -- with wallets having enough funds, wallets not having enough funds.
+    -- It would be better to test it here rather than in integration testing.
+    -- Moreover, we can test some properties about contents of SealedTx like
+    -- it only gets bigger, fee only increase when adding new inputs, etc.
+    -- for now preparing infrastructure fo that
+    describe "decode plutus jsons and coin select for different wallets" $ do
+        let testPlutusDir = $(getTestData) </> "plutus"
+        let matrix =
+                [ "pubkey-2.json"
+                ]
+        forM_ matrix $ \json -> do
+            let testFile = testPlutusDir </> json
+            it json $ property $ \(_thereWillBeWalletsHere :: Int) -> monadicIO $ do
+                bs <- run $ BL.readFile testFile
+                let decodeResult = eitherDecode @(ApiBalanceTransactionPostData 'Mainnet) bs
+                assert (isRight decodeResult == True)
 
     describe "golden tests for script hashes for different versions" $ do
         testScriptsAllLangs Cardano.SimpleScriptV1

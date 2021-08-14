@@ -201,6 +201,7 @@ test-suite unit
     ghc-options: -O2 -Werror
   build-depends:
       base
+    , aeson
     , base58-bytestring
     , bech32
     , bech32-th
@@ -217,6 +218,7 @@ test-suite unit
     , fmt
     , hspec-core
     , iohk-monitoring
+    , filepath
     , hspec
     , hspec-core
     , memory
