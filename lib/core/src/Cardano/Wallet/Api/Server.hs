@@ -607,6 +607,8 @@ import qualified Data.Text.Encoding as T
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as Warp
 
+import qualified Debug.Trace as TR
+
 -- | How the server should listen for incoming requests.
 data Listen
     = ListenOnPort Port
@@ -2043,11 +2045,11 @@ balanceTransaction _ ctx config (ApiT wid) body =
     else do
         ApiConstructTransaction _ cs _ <-
             constructTransaction ctx config (ApiT wid) $ toApiConstructTransactionData tx
-        let (sealedTxOutcoming, fee) = updateTx tl sealedTxIncoming (getInpsChange cs)
+        let (sealedTxOutcoming, newfee) = TR.trace ("getInpsChange cs:"<>show (getInpsChange cs)) $ updateTx tl sealedTxIncoming (getInpsChange cs)
         pure $ ApiConstructTransaction
             { transaction = ApiT sealedTxOutcoming
             , coinSelection = cs
-            , fee = Quantity $ fromIntegral fee
+            , fee = Quantity $ fromIntegral newfee
             }
   where
     toApiConstructTransactionData (Tx _ _ _ outs wdrlM mdM) = ApiConstructTransactionData

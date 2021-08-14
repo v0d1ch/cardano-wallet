@@ -324,7 +324,8 @@ newTransactionLayer networkId = TransactionLayer
     }
 
 _updateSealedTx :: SealedTx -> ([TxIn], [TxOut]) -> (SealedTx, Word64)
-_updateSealedTx tx _ = (tx, 0)
+_updateSealedTx (cardanoTx -> InAnyCardanoEra _era tx) _ =
+    (sealedTxFromCardano' tx, 0)
 
 _decodeSealedTx :: SealedTx -> Tx
 _decodeSealedTx (cardanoTx -> InAnyCardanoEra _era tx) = fromCardanoTx tx

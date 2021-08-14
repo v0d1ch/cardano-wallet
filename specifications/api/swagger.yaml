@@ -4086,6 +4086,19 @@ x-errAssetNotPresent: &errAssetNotPresent
       type: string
       enum: ['asset_not_present']
 
+x-errOutputsAlreadyCovered: &errOutputsAlreadyCovered
+  <<: *responsesErr
+  title: outputs_already_covered
+  properties:
+    message:
+      type: string
+      description: |
+        Occurs when requesting balancing of a transaction
+        that has already all outputs covered.
+    code:
+      type: string
+      enum: ['outputs_already_covered']
+
 x-responsesErr400: &responsesErr400
   400:
     description: Bad Request
@@ -4559,6 +4572,36 @@ x-responsesConstructTransaction: &responsesConstructTransaction
             - <<: *errCannotCoverFee
             - <<: *errNotEnoughMoney
             - <<: *errTransactionIsTooBig
+  <<: *responsesErr404WalletNotFound
+  <<: *responsesErr406
+  <<: *responsesErr415UnsupportedMediaType
+  202:
+    description: Accepted
+    content:
+      application/json:
+        schema: *ApiConstructTransaction
+
+x-responsesBalanceTransaction: &responsesBalanceTransaction
+  400:
+    description: Bad Request
+    content:
+      application/json:
+        schema:
+          oneOf:
+            - <<: *errBadRequest
+  403:
+    description: Forbidden
+    content:
+      application/json:
+        schema:
+          oneOf:
+            - <<: *errInvalidWalletType
+            - <<: *errAlreadyWithdrawing
+            - <<: *errUtxoTooSmall
+            - <<: *errCannotCoverFee
+            - <<: *errNotEnoughMoney
+            - <<: *errTransactionIsTooBig
+            - <<: *errOutputsAlreadyCovered
   <<: *responsesErr404WalletNotFound
   <<: *responsesErr406
   <<: *responsesErr415UnsupportedMediaType
@@ -5342,7 +5385,7 @@ paths:
         content:
           application/json:
             schema: *ApiBalanceTransactionPostData
-      responses: *responsesConstructTransaction
+      responses: *responsesBalanceTransaction
 
   /wallets/{walletId}/addresses:
     get:
