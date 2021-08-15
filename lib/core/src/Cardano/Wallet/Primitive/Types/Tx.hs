@@ -177,6 +177,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text.Lazy.Builder as Builder
 
+import qualified Debug.Trace as TR
 
 -- | Primitive @Tx@-type.
 --
@@ -543,7 +544,7 @@ cardanoTxFromBytes maxEra bs = asum $ map snd $ filter (withinEra maxEra . fst)
         => CardanoEra era
         -> Cardano.AsType era
         -> (AnyCardanoEra, Either DecoderError (InAnyCardanoEra Cardano.Tx))
-    deserialise era asEra =
+    deserialise era asEra = TR.trace ("-----tx:"<> show (deserialiseFromCBOR (Cardano.AsTx asEra) bs)) $
         ( anyCardanoEra era
         , InAnyCardanoEra era <$> deserialiseFromCBOR (Cardano.AsTx asEra) bs
         )
