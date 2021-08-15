@@ -135,6 +135,8 @@ import Cardano.Wallet.Util
     ( internalError )
 import Data.Bifunctor
     ( Bifunctor (..), bimap )
+import Data.Either.Combinators
+    ( mapBoth )
 import Data.Function
     ( (&) )
 import Data.Generics.Internal.VL.Lens
@@ -328,20 +330,30 @@ _updateSealedTx
     :: SealedTx
     -> ([TxIn], [TxOut])
     -> Either ErrUpdateSealedTx (SealedTx, Word64)
-_updateSealedTx (cardanoTx -> InAnyCardanoEra _era tx) _ = do
+_updateSealedTx (cardanoTx -> InAnyCardanoEra _era tx) (txins,txouts) = do
     let (Cardano.Tx (Cardano.TxBody txbodycontent) wits) = tx
     let currentTxIns = Cardano.txIns txbodycontent
     let currentTxOuts = Cardano.txOuts txbodycontent
-    let currentFee = Cardano.txFee txbodycontent
+    let currentFee@(Cardano.TxFeeExplicit _ (Cardano.Lovelace fee)) = Cardano.txFee txbodycontent
+
+    let addedTxIns =
+            (,Cardano.BuildTxWith (Cardano.KeyWitness Cardano.KeyWitnessForSpending))
+            . toCardanoTxIn <$> txins
+    let addedTxOuts = toAlonzoTxOut <$> txouts
+
     let txbodycontent' = txbodycontent
-            { Cardano.txIns = currentTxIns
-            , Cardano.txOuts = currentTxOuts
+            { Cardano.txIns = addedTxIns ++ currentTxIns
+            , Cardano.txOuts = addedTxOuts ++ currentTxOuts
             , Cardano.txFee = currentFee
             }
-    pure (sealedTxFromCardano' tx, 0)
+    mapBoth toErr (toSealedTx wits fee) $ Cardano.makeTransactionBody txbodycontent'
   where
     toErr :: Cardano.TxBodyError -> ErrUpdateSealedTx
     toErr = ErrUpdateSealedTxBodyError . T.pack . Cardano.displayError
+
+    toSealedTx wits fee body =
+        ( sealedTxFromCardano' $ Cardano.makeSignedTransaction wits body
+        , fromIntegral fee) -- We need to update this when fee calculation is possible for (wits, body)
 
 _decodeSealedTx :: SealedTx -> Tx
 _decodeSealedTx (cardanoTx -> InAnyCardanoEra _era tx) = fromCardanoTx tx
