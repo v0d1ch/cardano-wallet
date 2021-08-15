@@ -2031,7 +2031,7 @@ instance Arbitrary (ApiTxOut n) where
         <$> ((, Proxy @n) <$> arbitrary)
         <*> arbitrary
         <*> arbitrary
-        <*> arbitrary
+        <*> (ApiT <$> genTokenMapSmallRange)
 
 instance Arbitrary ApiTxIn where
     arbitrary = ApiTxIn

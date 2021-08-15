@@ -2745,8 +2745,10 @@ instance DecodeAddress n => FromJSON (ApiTxOut n) where
                            [] -> fail "tokens should not be empty"
                            cs -> for (reverse cs) $ \(tNameTxt, tQuantity) -> do
                                q <- parseJSON tQuantity
-                               tokenName <- parseJSON (String tNameTxt)
-                               pure (tokenName, TokenQuantity q)
+                               let tNameE = W.mkTokenName $ T.encodeUtf8 tNameTxt
+                               case tNameE of
+                                   Right tName -> pure (tName, TokenQuantity q)
+                                   Left _ -> fail "invalid token name"
                tokenPolicy <- parseJSON (String numTxt)
                tokenPairs <- withObject "Tokens with given policyId" processTokensPerPolicyId obj
                pure (Nothing, Just (tokenPolicy, NE.fromList tokenPairs))
@@ -2760,9 +2762,8 @@ instance EncodeAddress n => ToJSON (ApiTxOut n) where
             [ "address" .= toJSON addr
             , "value" .= object (["lovelace" .= toJSON amt] ++ tokens)
             ]
-        tokenPair (name, (TokenQuantity quantity)) =
-            let (String txt) = toJSON name
-            in [txt .= toJSON quantity]
+        tokenPair (tName, (TokenQuantity quantity)) =
+            [T.decodeLatin1 (W.unTokenName tName) .= toJSON quantity]
         addEntry policyId tokens' acc = acc ++
             [ toText policyId .= object (concatMap tokenPair (NE.toList $ NEMap.toList tokens')) ]
         tokens = Map.foldrWithKey addEntry [] $ toNestedMap assets'
