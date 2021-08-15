@@ -120,6 +120,7 @@ import Cardano.Wallet.Shelley.Compatibility.Ledger
 import Cardano.Wallet.Transaction
     ( DecryptedSigningKey (..)
     , ErrMkTransaction (..)
+    , ErrUpdateSealedTx (..)
     , SignTransactionKeyStore (..)
     , SignTransactionResult (..)
     , TransactionCtx (..)
@@ -323,9 +324,24 @@ newTransactionLayer networkId = TransactionLayer
     , updateTx = _updateSealedTx
     }
 
-_updateSealedTx :: SealedTx -> ([TxIn], [TxOut]) -> (SealedTx, Word64)
-_updateSealedTx (cardanoTx -> InAnyCardanoEra _era tx) _ =
-    (sealedTxFromCardano' tx, 0)
+_updateSealedTx
+    :: SealedTx
+    -> ([TxIn], [TxOut])
+    -> Either ErrUpdateSealedTx (SealedTx, Word64)
+_updateSealedTx (cardanoTx -> InAnyCardanoEra _era tx) _ = do
+    let (Cardano.Tx (Cardano.TxBody txbodycontent) wits) = tx
+    let currentTxIns = Cardano.txIns txbodycontent
+    let currentTxOuts = Cardano.txOuts txbodycontent
+    let currentFee = Cardano.txFee txbodycontent
+    let txbodycontent' = txbodycontent
+            { Cardano.txIns = currentTxIns
+            , Cardano.txOuts = currentTxOuts
+            , Cardano.txFee = currentFee
+            }
+    pure (sealedTxFromCardano' tx, 0)
+  where
+    toErr :: Cardano.TxBodyError -> ErrUpdateSealedTx
+    toErr = ErrUpdateSealedTxBodyError . T.pack . Cardano.displayError
 
 _decodeSealedTx :: SealedTx -> Tx
 _decodeSealedTx (cardanoTx -> InAnyCardanoEra _era tx) = fromCardanoTx tx

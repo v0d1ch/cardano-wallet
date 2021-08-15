@@ -405,6 +405,7 @@ import Cardano.Wallet.Transaction
     , ErrCannotQuit (..)
     , ErrMkTransaction
     , ErrSignTx (..)
+    , ErrUpdateSealedTx (..)
     , SignTransactionKeyStore (..)
     , TransactionCtx (..)
     , TransactionLayer (..)
@@ -2645,6 +2646,7 @@ data ErrSubmitTx
 -- | Errors that can occur when balancing transaction.
 data ErrBalanceTx
     = ErrBalanceTxAllOutputsCovered
+    | ErrBalanceTxUpdateError ErrUpdateSealedTx
     deriving (Show, Eq)
 
 -- | Errors that can occur when trying to change a wallet's passphrase.
