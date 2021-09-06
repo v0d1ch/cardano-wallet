@@ -10,7 +10,7 @@ module Data.Table (
 
     -- * Table
     Table (..)
-    , empty, fromList, toList
+    , empty, fromRows, fromList, toList
     , selectWhere, insertMany, deleteWhere, updateWhere
     , DeltaTable (..)
     , DeltaDB (..)
@@ -73,6 +73,14 @@ insertMany rs table = ($ table) . foldr (.) id $ map insertRow rs
 -- | Construct a 'Table' from a list of rows
 fromList :: [row] -> Table row
 fromList rows = insertMany rows empty
+
+-- | Construct a 'Table' from a list of rows with unique IDs.
+fromRows :: [(Int, row)] -> Table row
+fromRows rows = Table
+    { rows = Map.fromList rows
+    , uids = consume keys abundance
+    }
+  where keys = map fst rows
 
 -- | List of rows contained in the 'Table'.
 toList :: Table row -> [row]

@@ -61,6 +61,8 @@ import Data.Table
     )
 import GHC.Generics
     ( Generic )
+import Say
+    ( say, sayShow )
 
 -- FIXME: Replace with IOSim stuff later.
 import Data.IORef
@@ -93,8 +95,14 @@ SeqStateAddress
     seqStateAddressWalletId         Word32             sql=wallet_id
     seqStateAddressAddress          Address            sql=address
     seqStateAddressIndex            Word32             sql=address_ix
-    deriving Show Generic
+    deriving Generic
 |]
+
+instance Show SeqStateAddress where
+    show x =
+        show (seqStateAddressTo x)
+        <> " <--" <> show (seqStateAddressAddress x)
+        <> "-- " <> show (seqStateAddressFrom x)
 
 addressDBIso :: Iso' (Edge Node AddressInPool) SeqStateAddress
 addressDBIso = iso
@@ -136,7 +144,7 @@ instance MonadSTM (NoLoggingT (ResourceT IO)) where
 -- create the database table in the first place.
 newDBStore
     :: forall record m.
-    ( PersistEntity record, PersistEntityBackend record ~ SqlBackend
+    ( PersistRecordBackend record SqlBackend
     , ToBackendKey SqlBackend record, Show record
     , MonadIO m )
     => m (Store DBIO [DeltaDB Int record] (Table record))
@@ -145,9 +153,12 @@ newDBStore = do
     let rememberSupply table = liftIO $ writeIORef ref $ Just $ uids table
     pure $ Store
         { loadS   = do
-            -- liftIO . print =<< selectList all [] -- for debugging
-            -- read database table
-            table <- Table.fromList . map entityVal <$> selectList all []
+            debug $ do
+                say "\n** loadS"
+                liftIO . print =<< selectList all []
+            -- read database table, preserve keys
+            let toPair (Entity key val) = (fromIntegral $ fromSqlKey key,val)
+            table <- Table.fromRows . map toPair <$> selectList all []
             -- but use our own unique ID supply
             liftIO (readIORef ref) >>= \case
                 Just supply  -> pure $ Just table{uids = supply}
@@ -159,10 +170,16 @@ newDBStore = do
             _ <- insertMany $ Table.toList table
             rememberSupply table
         , updateS = \table ds -> do
+            debug $ do
+                say "\n** updateS table deltas"
+                sayShow $ table
+                sayShow $ ds
             mapM_ (update1 table) ds
-            rememberSupply table
+            rememberSupply (apply ds table) -- need to use updated supply
         }
   where
+    debug m = if False then m else pure ()
+
     all :: [Filter record]
     all = []
 
