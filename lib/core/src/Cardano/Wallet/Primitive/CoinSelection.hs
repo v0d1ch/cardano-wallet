@@ -173,19 +173,19 @@ data SelectionConstraints = SelectionConstraints
 --
 data SelectionParams = SelectionParams
     { assetsToBurn
-        :: !TokenMap
+        :: TokenMap
         -- ^ Specifies a set of assets to burn.
     , assetsToMint
-        :: !TokenMap
+        :: TokenMap
         -- ^ Specifies a set of assets to mint.
     , outputsToCover
-        :: !(NonEmpty TxOut)
+        :: NonEmpty TxOut
         -- ^ Specifies a set of outputs that must be paid for.
     , rewardWithdrawal
-        :: !(Maybe Coin)
+        :: Maybe Coin
         -- ^ Specifies the value of a withdrawal from a reward account.
     , utxoAvailable
-        :: !UTxOIndex
+        :: UTxOIndex
         -- ^ Specifies the set of all available UTxO entries. The algorithm
         -- will choose entries from this set when selecting ordinary inputs
         -- and collateral inputs.
