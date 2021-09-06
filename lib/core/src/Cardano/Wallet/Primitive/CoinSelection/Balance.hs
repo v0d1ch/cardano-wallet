@@ -478,8 +478,6 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
         , assetsToBurn
         } = criteria
 
-    requestedOutputs = F.foldMap (view #tokens) outputsToCover
-
     mkInputsSelected :: UTxOIndex -> NonEmpty (TxIn, TxOut)
     mkInputsSelected =
         fromMaybe invariantSelectAnyInputs . NE.nonEmpty . UTxOIndex.toList
@@ -488,15 +486,17 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
     balanceAvailable = fullBalance utxoAvailable extraCoinSource
 
     balanceRequired :: TokenBundle
-    balanceRequired =
-        -- of course, we need to satisfy the outputs the caller asked for
-        requestedOutputs
-        -- we must also find assets to burn
-        `TokenBundle.add`
-            TokenBundle.fromTokenMap assetsToBurn
-        -- but assets minted reduce the quantity of assets we have to select
-        `TokenBundle.unsafeSubtract`
+    balanceRequired = totalOutputValue `TokenBundle.difference` totalInputValue
+      where
+        totalInputValue :: TokenBundle
+        totalInputValue =
             TokenBundle.fromTokenMap assetsToMint
+            <> F.foldMap TokenBundle.fromCoin extraCoinSource
+
+        totalOutputValue :: TokenBundle
+        totalOutputValue =
+            TokenBundle.fromTokenMap assetsToBurn
+            <> F.foldMap (view #tokens) outputsToCover
 
     insufficientMinCoinValues :: [InsufficientMinCoinValueError]
     insufficientMinCoinValues =
