@@ -1552,7 +1552,7 @@ x-stakePoolMetrics: &stakePoolMetrics
     - owner_stake
   properties:
     non_myopic_member_rewards: *nonMyopicMemberRewards
-    desirability_score: &desirabilityScore
+    desirability_score: *desirabilityScore
     relative_stake:
       <<: *percentage
       description: |
