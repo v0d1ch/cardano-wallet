@@ -20,6 +20,7 @@
 -- License: Apache-2.0
 --
 -- Provides functions to launch cardano-nodes in a cluster for /testing/.
+-- Also provides configuration options.
 
 module Cardano.Wallet.Shelley.Launch.Cluster
     ( -- * Local test cluster launcher
@@ -54,6 +55,7 @@ module Cardano.Wallet.Shelley.Launch.Cluster
     , testLogDirFromEnv
     , walletListenFromEnv
     , tokenMetadataServerFromEnv
+    , debugConfigFromEnv
 
       -- * Faucets
     , sendFaucetFundsTo
@@ -131,6 +133,8 @@ import Cardano.Wallet.Primitive.Types.Tx
     ( TxOut )
 import Cardano.Wallet.Shelley.Compatibility
     ( StandardShelley )
+import Cardano.Wallet.Shelley
+    ( DebugConfig (..) )
 import Cardano.Wallet.Shelley.Launch
     ( TempDirLog (..), envFromText, isEnvSet, lookupEnvNonEmpty )
 import Cardano.Wallet.Unsafe
@@ -285,6 +289,13 @@ tokenMetadataServerFromEnv = envFromText "TOKEN_METADATA_SERVER" >>= \case
     Nothing -> pure Nothing
     Just (Right s) -> pure (Just s)
     Just (Left e) -> die $ show e
+
+-- | Collect 'DebugConfig' from environment variables.
+debugConfigFromEnv :: IO DebugConfig
+debugConfigFromEnv = do
+    noCacheLocalStateQuery <- maybe False (const True) <$>
+        lookupEnvNonEmpty "NO_CACHE_LOCALSTATEQUERY"
+    pure DebugConfig{..}
 
 -- | Directory for extra logging. Buildkite will set this environment variable
 -- and upload logs in it automatically.

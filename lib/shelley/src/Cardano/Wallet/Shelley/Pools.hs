@@ -116,7 +116,7 @@ import Cardano.Wallet.Shelley.Compatibility
 import Cardano.Wallet.Unsafe
     ( unsafeMkPercentage )
 import Control.Cache
-    ( CacheWorker )
+    ( CacheWorker, MkCacheWorker )
 import Control.Monad
     ( forM, forM_, forever, void, when )
 import Control.Monad.IO.Class
@@ -229,7 +229,7 @@ newStakePoolLayer
     => TVar PoolMetadataGCStatus
     -> NetworkLayer IO (CardanoBlock crypto)
     -> DBLayer IO
-    -> (forall a. NominalDiffTime -> NominalDiffTime -> IO a -> IO (CacheWorker, IO a))
+    -> (forall a. MkCacheWorker a)
     -> IO ()
     -> IO (CacheWorker, StakePoolLayer)
 newStakePoolLayer gcStatus nl db@DBLayer {..} mkCacheWorker restartSyncThread = do

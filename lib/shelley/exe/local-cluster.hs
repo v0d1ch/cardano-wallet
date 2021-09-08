@@ -48,6 +48,7 @@ import Cardano.Wallet.Shelley.Launch
 import Cardano.Wallet.Shelley.Launch.Cluster
     ( ClusterLog (..)
     , RunningNode (..)
+    , debugConfigFromEnv
     , localClusterConfigFromEnv
     , moveInstantaneousRewardsTo
     , oneMillionAda
@@ -240,6 +241,7 @@ main = withLocalClusterSetup $ \dir clusterLogs walletLogs ->
             createDirectory db
             listen <- walletListenFromEnv
             tokenMetadataServer <- tokenMetadataServerFromEnv
+            debug  <- debugConfigFromEnv
 
             prometheusUrl <- (maybe "none"
                     (\(h, p) -> T.pack h <> ":" <> toText @(Port "Prometheus") p)
@@ -261,6 +263,7 @@ main = withLocalClusterSetup $ \dir clusterLogs walletLogs ->
                 Nothing
                 Nothing
                 tokenMetadataServer
+                (Just debug)
                 socketPath
                 block0
                 (gp, vData)

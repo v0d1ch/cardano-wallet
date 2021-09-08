@@ -5,6 +5,7 @@
 -- This module provides a utility for caching the results of long running actions.
 module Control.Cache
     ( CacheWorker (..)
+    , MkCacheWorker
     , newCacheWorker
     , don'tCacheWorker
 
@@ -41,12 +42,17 @@ import UnliftIO.STM
 -- runs a function periodically and caches the result.
 newtype CacheWorker = CacheWorker { runCacheWorker :: IO () }
 
+-- | Synonym for the type of 'newCacheWorker' to increase readability.
+type MkCacheWorker a =
+    NominalDiffTime -> NominalDiffTime -> IO a -> IO (CacheWorker, IO a)
+
 -- | Run an action periodically and cache the results.
 -- 
 -- Requesting the cached value before the cache has
 -- been filled will lead to waiting.
 -- 
 -- The action may throw exceptions:
+--
 -- * Any synchronous exception will be treated as a return value:
 --   the exception is stored in the cache and rethrown when attempting
 --   to read the cache.
@@ -76,8 +82,8 @@ newCacheWorker ttl gracePeriod action = do
 
 -- | For testing: A worker that does not run anything,
 -- the action is simply performed each time that its result is requested.
-don'tCacheWorker :: NominalDiffTime -> IO a -> IO (CacheWorker, IO a)
-don'tCacheWorker _ action = pure (CacheWorker $ pure (), action)
+don'tCacheWorker :: MkCacheWorker a
+don'tCacheWorker _ _ action = pure (CacheWorker $ pure (), action)
 
 -- | Variant of 'threadDelay' where the argument has type 'NominalDiffTime'.
 --
