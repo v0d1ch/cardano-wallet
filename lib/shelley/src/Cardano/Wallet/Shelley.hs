@@ -76,7 +76,7 @@ import Cardano.Wallet.Api.Types
 import Cardano.Wallet.DB.Sqlite
     ( DBFactoryLog, DefaultFieldValues (..), PersistState )
 import Cardano.Wallet.Logging
-    ( trMessageText, LoggedException (..) )
+    ( LoggedException (..), trMessageText )
 import Cardano.Wallet.Network
     ( FollowLog (..), NetworkLayer (..) )
 import Cardano.Wallet.Primitive.AddressDerivation
@@ -220,6 +220,7 @@ data SomeNetworkDiscriminant where
 
 deriving instance Show SomeNetworkDiscriminant
 
+{- HLINT ignore DebugConfig "Use newtype instead of data" -}
 -- | Various settings that modify the behavior 'serveWallet' in order
 -- to make it easier to test.
 data DebugConfig = DebugConfig

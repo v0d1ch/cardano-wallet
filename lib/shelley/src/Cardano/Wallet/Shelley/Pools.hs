@@ -151,10 +151,10 @@ import Data.Set
     ( Set )
 import Data.Text.Class
     ( ToText (..) )
-import Data.Time.Clock.POSIX
-    ( getPOSIXTime, posixDayLength )
 import Data.Time.Clock
     ( NominalDiffTime )
+import Data.Time.Clock.POSIX
+    ( getPOSIXTime, posixDayLength )
 import Data.Tuple.Extra
     ( dupe )
 import Data.Void

@@ -131,10 +131,10 @@ import Cardano.Wallet.Primitive.Types.TokenQuantity
     ( TokenQuantity (..) )
 import Cardano.Wallet.Primitive.Types.Tx
     ( TxOut )
-import Cardano.Wallet.Shelley.Compatibility
-    ( StandardShelley )
 import Cardano.Wallet.Shelley
     ( DebugConfig (..) )
+import Cardano.Wallet.Shelley.Compatibility
+    ( StandardShelley )
 import Cardano.Wallet.Shelley.Launch
     ( TempDirLog (..), envFromText, isEnvSet, lookupEnvNonEmpty )
 import Cardano.Wallet.Unsafe
@@ -168,7 +168,7 @@ import Data.Functor
 import Data.List
     ( intercalate, nub, permutations, sort )
 import Data.Maybe
-    ( catMaybes, fromMaybe )
+    ( catMaybes, fromMaybe, isJust )
 import Data.Text
     ( Text )
 import Data.Text.Class
@@ -293,7 +293,7 @@ tokenMetadataServerFromEnv = envFromText "TOKEN_METADATA_SERVER" >>= \case
 -- | Collect 'DebugConfig' from environment variables.
 debugConfigFromEnv :: IO DebugConfig
 debugConfigFromEnv = do
-    noCacheLocalStateQuery <- maybe False (const True) <$>
+    noCacheLocalStateQuery <- isJust <$>
         lookupEnvNonEmpty "NO_CACHE_LOCALSTATEQUERY"
     pure DebugConfig{..}
 

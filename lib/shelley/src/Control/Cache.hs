@@ -28,12 +28,7 @@ import UnliftIO.Concurrent
 import UnliftIO.Exception
     ( catchAny, throwIO )
 import UnliftIO.STM
-    ( atomically
-    , newTVarIO
-    , readTVar
-    , retrySTM
-    , writeTVar
-    )
+    ( atomically, newTVarIO, readTVar, retrySTM, writeTVar )
 
 {-------------------------------------------------------------------------------
     Cache Worker
