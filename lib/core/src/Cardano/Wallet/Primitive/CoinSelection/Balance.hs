@@ -99,6 +99,7 @@ module Cardano.Wallet.Primitive.CoinSelection.Balance
     , mapMaybe
     , balanceMissing
     , missingOutputAssets
+    , inputFromSelection
     ) where
 
 import Prelude
@@ -269,6 +270,10 @@ data SelectionResult change = SelectionResult
         -- the selection.
     }
     deriving (Generic, Eq, Show)
+
+-- | Make a transaction input resolver from the coin selection.
+inputFromSelection :: SelectionResult change -> TxIn -> Maybe TxOut
+inputFromSelection cs = flip lookup $ NE.toList $ view #inputsSelected cs
 
 -- | Calculate the actual difference between the total outputs (incl. change)
 -- and total inputs of a particular selection. By construction, this should be
@@ -482,7 +487,7 @@ performSelection
     -> SelectionCriteria
         -- ^ The selection goal to satisfy.
     -> m (Either SelectionError (SelectionResult TokenBundle))
-performSelection minCoinFor costFor bundleSizeAssessor criteria
+performSelection minCoinFor costFor bundleSizeAssessor SelectionCriteria{..}
     -- Is the minted value all spent or burnt?
     | not (assetsToMint `leq` (assetsToBurn <> requestedOutputAssets)) =
         pure $ Left $ OutputsInsufficient $ OutputsInsufficientError
@@ -510,15 +515,6 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
                 , balanceRequired
                 }
   where
-    SelectionCriteria
-        { outputsToCover
-        , utxoAvailable
-        , selectionLimit
-        , extraCoinSource
-        , assetsToMint
-        , assetsToBurn
-        } = criteria
-
     requestedOutputs = F.foldMap (view #tokens) outputsToCover
     requestedOutputAssets = view #tokens requestedOutputs
 
@@ -1093,7 +1089,7 @@ makeChange
         -- ^ Criteria for making change.
     -> Either UnableToConstructChangeError [TokenBundle]
         -- ^ Generated change bundles.
-makeChange criteria
+makeChange MakeChangeCriteria{..}
     | not (totalOutputValue `leq` totalInputValue) =
         totalInputValueInsufficient
     | TokenBundle.getCoin totalOutputValue == Coin 0 =
@@ -1104,17 +1100,6 @@ makeChange criteria
             assignCoinsToChangeMaps
                 adaAvailable minCoinFor changeMapOutputCoinPairs
   where
-    MakeChangeCriteria
-        { minCoinFor
-        , bundleSizeAssessor
-        , requiredCost
-        , extraCoinSource
-        , inputBundles
-        , outputBundles
-        , assetsToMint
-        , assetsToBurn
-        } = criteria
-
     -- The following subtraction is safe, as we have already checked
     -- that the total input value is greater than the total output
     -- value:
