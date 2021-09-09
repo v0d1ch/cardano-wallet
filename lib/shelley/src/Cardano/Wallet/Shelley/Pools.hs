@@ -332,7 +332,10 @@ sortRandomOn seed f
 -------------------------------------------------------------------------------}
 
 percentOf :: Percentage -> Coin -> Coin
-percentOf p (Coin x) = Coin . round $ getPercentage p * fromIntegral x
+percentOf = fractionOf . getPercentage
+
+fractionOf :: Rational -> Coin -> Coin
+fractionOf r (Coin x) = Coin . round $ r * fromIntegral x
 
 oneMinus :: Percentage -> Percentage
 oneMinus p = unsafeMkPercentage $ 1 - getPercentage p
@@ -354,7 +357,7 @@ nonMyopicMemberReward rp RewardProvenancePool{..} isTop tcoin
     | ownerStake < ownerPledge = Coin 0
     | otherwise
         = afterFees cost margin
-        $ performanceEstimate `percentOf` optimalRewards rp s sigma_nonmyopic
+        $ performanceEstimate `fractionOf` optimalRewards rp s sigma_nonmyopic
   where
     s     = ownerStakeRelative
     sigma = stakeRelative
@@ -395,7 +398,7 @@ optimalRewards params s sigma = Coin . round
 desirability :: RewardParams -> RewardProvenancePool -> Coin
 desirability rp RewardProvenancePool{..}
     = afterFees cost margin
-    $ performanceEstimate `percentOf` optimalRewards rp ownerStakeRelative (z0 rp)
+    $ performanceEstimate `fractionOf` optimalRewards rp ownerStakeRelative (z0 rp)
 
 -- | The saturation of a pool is the ratio of the current pool stake
 -- to the fully saturated stake.
@@ -476,7 +479,7 @@ listPools ti StakePoolsSummary{rewardParams,pools} dbData userStake =
                     $ ownerStake_ `proportionTo` (totalStake rewardParams)
                 , cost = poolCost $ registrationCert db
                 , margin = poolMargin $ registrationCert db
-                , performanceEstimate = unsafeMkPercentage 1
+                , performanceEstimate = 1
                 }
         in (poolDefault, db)
 

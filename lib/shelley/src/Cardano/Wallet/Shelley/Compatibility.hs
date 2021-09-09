@@ -785,7 +785,7 @@ fromRewardProvenancePool totalStake SL.RewardProvenancePool{..} =
           `proportionTo` fromIntegral (W.unCoin totalStake)
     , cost = toWalletCoin (SL._poolCost poolParamsP)
     , margin = fromUnitInterval (SL._poolMargin poolParamsP)
-    , performanceEstimate = unsafeMkPercentage appPerfP
+    , performanceEstimate = appPerfP
     }
   where
     clipToPercentage = unsafeMkPercentage . min 1 . max 0

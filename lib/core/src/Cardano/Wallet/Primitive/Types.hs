@@ -754,7 +754,7 @@ data RewardProvenancePool = RewardProvenancePool
     , ownerStakeRelative :: Percentage -- ^ s = owner stake / total stake
     , cost :: Coin
     , margin :: Percentage
-    , performanceEstimate :: Percentage
+    , performanceEstimate :: Rational
     } deriving (Show, Eq)
 
 instance Buildable RewardProvenancePool where
