@@ -71,9 +71,11 @@ import Control.Monad.Random.Class
 import Control.Monad.Trans.Except
     ( ExceptT (..), withExceptT )
 import Data.Generics.Internal.VL.Lens
-    ( view )
+    ( over, set, view )
 import Data.Generics.Labels
     ()
+import Data.List
+    ( foldl', partition )
 import Data.List.NonEmpty
     ( NonEmpty (..) )
 import Data.Maybe
@@ -121,7 +123,7 @@ makeWrapper
     -> SelectionParams
     -> Either ErrPrepareOutputs (SelectionReturn -> SelectionReturn, PerformSelection)
 makeWrapper sc@SelectionConstraints{..} SelectionParams{..} =
-    (id,) . getArgs <$> prepareOutputs outputsToCover
+    (fmap repairOutputs,) . getArgs <$> prepareOutputs outputsToCover
   where
     -- TODO: [ADP-1037] Adjust coin selection and fee estimation to handle
     -- collateral inputs.
@@ -149,13 +151,43 @@ makeWrapper sc@SelectionConstraints{..} SelectionParams{..} =
         rewardWithdrawals `plusDeposits` certificateDepositsReturned
     extraCoinSink = scaleCoin certificateDepositsTaken depositAmount
 
+    extraValueSink = TokenBundle.fromCoin $
+        extraCoinSink `above` extraCoinSource
+
     prepareOutputs :: [TxOut] -> Either ErrPrepareOutputs (NonEmpty TxOut)
     prepareOutputs = (validateTxOutsForSelection sc <=< ensureNonEmptyOutputs)
+        . addExtraValueSinkToOutputs
 
     -- At present, the coin selection algorithm does not permit an empty output
     -- list, so validate for this precondition.
     ensureNonEmptyOutputs =
         maybe (Left ErrPrepareOutputsTxOutMissing) Right . NE.nonEmpty
+
+    addExtraValueSinkToOutputs os
+        | null os && extraValueSink /= mempty =
+            (TxOut dummyAddress extraValueSink : os)
+        | null os =
+            (TxOut dummyAddress dummyValue : os)
+        | otherwise = os
+    dummyAddress = Address ""
+    dummyValue = TokenBundle.fromCoin $ computeMinimumAdaQuantity mempty
+
+    -- Post-process the coin selection result by removing any dummy outputs
+    -- added by 'addExtraValueSink'.
+    repairOutputs :: SelectionResult TokenBundle -> SelectionResult TokenBundle
+    repairOutputs sel =
+        over #changeGenerated (addToHead (surplus ds)) $
+        set #outputsCovered outs sel
+      where
+        (ds, outs) = partition isDummy (view #outputsCovered sel)
+        isDummy = ((== dummyAddress) . view #address)
+
+        addToHead :: TokenBundle -> [TokenBundle] -> [TokenBundle]
+        addToHead _ []    = []
+        addToHead x (h:q) = TokenBundle.add x h : q
+
+        surplus = foldl' (flip TokenBundle.unsafeSubtract) extraValueSink
+            . map (view #tokens)
 
 above :: Coin -> Coin -> Coin
 above a b = fromMaybe (Coin 0) $ subtractCoin a b
