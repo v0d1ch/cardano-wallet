@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
@@ -7,9 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE DeriveFunctor #-}
 
 -- |
 -- Copyright: © 2018-2020 IOHK
@@ -160,7 +159,8 @@ stdoutTextTracer = Tracer $ liftIO . B8.putStrLn . T.encodeUtf8 . toText
                                 Logging helpers
 -------------------------------------------------------------------------------}
 
--- | Run an 'ExceptT' action, then trace its result, all in one step. This is a more basic version of 'resultTracer'.
+-- | Run an 'ExceptT' action, then trace its result, all in one step.
+-- This is a more basic version of 'resultTracer'.
 traceWithExceptT :: Monad m => Tracer m (Either e a) -> ExceptT e m a -> ExceptT e m a
 traceWithExceptT tr (ExceptT action) = ExceptT $ do
     res <- action
