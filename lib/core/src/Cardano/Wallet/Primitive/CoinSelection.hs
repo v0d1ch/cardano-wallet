@@ -109,12 +109,15 @@ performSelection
     :: forall m. (HasCallStack, MonadRandom m) => PerformSelection m TokenBundle
 performSelection = performAllModifications performSelectionInner
   where
-    -- TODO:
+    -- Performs all modifications required to transform the constraints and
+    -- parameters.
     --
-    -- https://input-output.atlassian.net/browse/ADP-1037
+    -- Each modification is self-contained in its own function.
+    --
+    -- TODO: [ADP-1037]
     -- Adjust coin selection and fee estimation to handle collateral inputs
     --
-    -- https://input-output.atlassian.net/browse/ADP-1070
+    -- TODO: [ADP-1070]
     -- Adjust coin selection and fee estimation to handle pre-existing inputs
     --
     performAllModifications :: ModifySelection m TokenBundle
@@ -122,6 +125,12 @@ performSelection = performAllModifications performSelectionInner
         = accountForExistingInputs
         . prepareOutputs
 
+-- | Calls the inner coin selection algorithms.
+--
+-- This function merely maps the constraints and parameter records to the form
+-- required to call the inner coin selection algorithm, without performing any
+-- modifications to the constraints or parameters.
+--
 performSelectionInner
     :: (HasCallStack, MonadRandom m) => PerformSelection m TokenBundle
 performSelectionInner selectionConstraints selectionParams =
@@ -153,13 +162,18 @@ performSelectionInner selectionConstraints selectionParams =
         , utxoAvailable
         } = selectionParams
 
+-- | Represents a function that can perform a selection.
+--
 type PerformSelection m change =
     SelectionConstraints ->
     SelectionParams ->
     m (Either SelectionError (SelectionResult change))
 
+-- | Represents a function that can modify another selection function.
+--
 type ModifySelection m change =
-    PerformSelection m change -> PerformSelection m change
+    PerformSelection m change ->
+    PerformSelection m change
 
 -- | Specifies all constraints required for coin selection.
 --
@@ -229,7 +243,9 @@ data SelectionError
     | SelectionOutputsError ErrPrepareOutputs
     deriving (Eq, Show)
 
-accountForExistingInputs ::Functor m => ModifySelection m change
+-- | Accounts for pre-existing inputs provided to coin selection.
+--
+accountForExistingInputs :: Functor m => ModifySelection m change
 accountForExistingInputs performSelectionFn constraints params =
     fmap modifyResult <$> performSelectionFn
         (modifyConstraints constraints)
