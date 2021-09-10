@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Copyright: © 2021 IOHK
@@ -105,14 +106,9 @@ import qualified Data.Set as Set
 --  - balancing a selection to pay for the transaction fee.
 --
 performSelection
-    :: (HasCallStack, MonadRandom m) => PerformSelection m TokenBundle
-performSelection =
-    accountForExistingInputs
-        performSelectionInner
-
-performSelectionInner
-    :: (HasCallStack, MonadRandom m) => PerformSelection m TokenBundle
-performSelectionInner selectionConstraints selectionParams =
+    :: forall m. (HasCallStack, MonadRandom m) => PerformSelection m TokenBundle
+performSelection = performAllModifications performSelectionInner
+  where
     -- TODO:
     --
     -- https://input-output.atlassian.net/browse/ADP-1037
@@ -121,24 +117,28 @@ performSelectionInner selectionConstraints selectionParams =
     -- https://input-output.atlassian.net/browse/ADP-1070
     -- Adjust coin selection and fee estimation to handle pre-existing inputs
     --
-    case prepareOutputs selectionConstraints outputsToCover of
-        Left e ->
-            pure $ Left $ SelectionOutputsError e
-        Right preparedOutputsToCover ->
-            first SelectionBalanceError <$> Balance.performSelection
-                computeMinimumAdaQuantity
-                computeMinimumCost
-                assessTokenBundleSize
-                SelectionCriteria
-                    { assetsToBurn
-                    , assetsToMint
-                    , extraCoinSource = rewardWithdrawal
-                    , outputsToCover = preparedOutputsToCover
-                    , selectionLimit =
-                        computeSelectionLimit $ F.toList preparedOutputsToCover
-                    , utxoAvailable
-                    }
+    performAllModifications :: ModifySelection m TokenBundle
+    performAllModifications
+        = accountForExistingInputs
+        . prepareOutputs
+
+performSelectionInner
+    :: (HasCallStack, MonadRandom m) => PerformSelection m TokenBundle
+performSelectionInner selectionConstraints selectionParams =
+    first SelectionBalanceError <$> Balance.performSelection
+        computeMinimumAdaQuantity
+        computeMinimumCost
+        assessTokenBundleSize
+        criteria
   where
+    criteria = SelectionCriteria
+        { assetsToBurn
+        , assetsToMint
+        , extraCoinSource = rewardWithdrawal
+        , outputsToCover
+        , selectionLimit = computeSelectionLimit (F.toList outputsToCover)
+        , utxoAvailable
+        }
     SelectionConstraints
         { assessTokenBundleSize
         , computeMinimumAdaQuantity
@@ -157,6 +157,9 @@ type PerformSelection m change =
     SelectionConstraints ->
     SelectionParams ->
     m (Either SelectionError (SelectionResult change))
+
+type ModifySelection m change =
+    PerformSelection m change -> PerformSelection m change
 
 -- | Specifies all constraints required for coin selection.
 --
@@ -226,10 +229,7 @@ data SelectionError
     | SelectionOutputsError ErrPrepareOutputs
     deriving (Eq, Show)
 
-accountForExistingInputs
-    :: Functor m
-    => PerformSelection m change
-    -> PerformSelection m change
+accountForExistingInputs ::Functor m => ModifySelection m change
 accountForExistingInputs performSelectionFn constraints params =
     fmap modifyResult <$> performSelectionFn
         (modifyConstraints constraints)
@@ -308,11 +308,17 @@ accountForExistingInputs performSelectionFn constraints params =
 
 -- | Prepares the given user-specified outputs, ensuring that they are valid.
 --
-prepareOutputs
+prepareOutputs :: Applicative m => ModifySelection m change
+prepareOutputs performSelectionFn constraints params =
+    case prepareOutputsInner constraints (view #outputsToCover params) of
+        Left err -> pure $ Left $ SelectionOutputsError err
+        Right os -> performSelectionFn constraints params {outputsToCover = os}
+
+prepareOutputsInner
     :: SelectionConstraints
     -> NonEmpty TxOut
     -> Either ErrPrepareOutputs (NonEmpty TxOut)
-prepareOutputs constraints outputsUnprepared
+prepareOutputsInner constraints outputsUnprepared
     | (address, assetCount) : _ <- excessivelyLargeBundles =
         Left $
             -- We encountered one or more excessively large token bundles.
