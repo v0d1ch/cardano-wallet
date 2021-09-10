@@ -49,7 +49,7 @@ import Cardano.Wallet.Primitive.CoinSelection.Balance
 import Cardano.Wallet.Primitive.Types.Address
     ( Address (..) )
 import Cardano.Wallet.Primitive.Types.Coin
-    ( Coin (..) )
+    ( Coin (..), addCoin, scaleCoin, subtractCoin )
 import Cardano.Wallet.Primitive.Types.TokenBundle
     ( TokenBundle )
 import Cardano.Wallet.Primitive.Types.TokenMap
@@ -71,11 +71,15 @@ import Control.Monad.Random.Class
 import Control.Monad.Trans.Except
     ( ExceptT (..), withExceptT )
 import Data.Generics.Internal.VL.Lens
-    ( view )
+    ( over, set, view )
 import Data.Generics.Labels
     ()
+import Data.List
+    ( foldl', partition )
 import Data.List.NonEmpty
     ( NonEmpty (..) )
+import Data.Maybe
+    ( fromMaybe )
 import Data.Word
     ( Word16 )
 import GHC.Generics
@@ -114,11 +118,12 @@ runWalletCoinSelection sc sp = do
 type SelectionReturn = Either SelectionError (SelectionResult TokenBundle)
 
 makeWrapper
-    :: SelectionConstraints
+    :: HasCallStack
+    => SelectionConstraints
     -> SelectionParams
     -> Either ErrPrepareOutputs (SelectionReturn -> SelectionReturn, PerformSelection)
 makeWrapper sc@SelectionConstraints{..} SelectionParams{..} =
-    (id,) . getArgs <$> prepareOutputs outputsToCover
+    (fmap repairOutputs,) . getArgs <$> prepareOutputs outputsToCover
   where
     -- TODO: [ADP-1037] Adjust coin selection and fee estimation to handle
     -- collateral inputs.
@@ -127,25 +132,65 @@ makeWrapper sc@SelectionConstraints{..} SelectionParams{..} =
     -- pre-existing inputs.
     getArgs outputsToCover' = PerformSelection
         { computeMinimumAdaQuantity
-        , computeMinimumCost
-        , bundleSizeAssessor
+        , computeMinimumCost = computeMinimumCostWithExtras
         , selectionCriteria = SelectionCriteria
             { outputsToCover = outputsToCover'
-            , utxoAvailable
             , selectionLimit = computeSelectionLimit $ F.toList outputsToCover'
-            , extraCoinSource = Just rewardWithdrawals
-            , assetsToMint
-            , assetsToBurn
-            }
+             , extraCoinSource = Just extraCoinSource
+            , .. }
+        , ..
         }
+
+    plusDeposits :: Coin -> Natural -> Coin
+    plusDeposits amt n = amt `addCoin` scaleCoin n depositAmount
+
+    computeMinimumCostWithExtras tx =
+        (computeMinimumCost tx `addCoin` extraCoinSink) `above` extraCoinSource
+
+    extraCoinSource =
+        rewardWithdrawals `plusDeposits` certificateDepositsReturned
+    extraCoinSink = scaleCoin certificateDepositsTaken depositAmount
+
+    extraValueSink = TokenBundle.fromCoin $
+        extraCoinSink `above` extraCoinSource
 
     prepareOutputs :: [TxOut] -> Either ErrPrepareOutputs (NonEmpty TxOut)
     prepareOutputs = (validateTxOutsForSelection sc <=< ensureNonEmptyOutputs)
+        . addExtraValueSinkToOutputs
 
     -- At present, the coin selection algorithm does not permit an empty output
     -- list, so validate for this precondition.
     ensureNonEmptyOutputs =
         maybe (Left ErrPrepareOutputsTxOutMissing) Right . NE.nonEmpty
+
+    addExtraValueSinkToOutputs os
+        | null os && extraValueSink /= mempty =
+            (TxOut dummyAddress extraValueSink : os)
+        | null os =
+            (TxOut dummyAddress dummyValue : os)
+        | otherwise = os
+    dummyAddress = Address ""
+    dummyValue = TokenBundle.fromCoin $ computeMinimumAdaQuantity mempty
+
+    -- Post-process the coin selection result by removing any dummy outputs
+    -- added by 'addExtraValueSink'.
+    repairOutputs :: SelectionResult TokenBundle -> SelectionResult TokenBundle
+    repairOutputs sel =
+        over #changeGenerated (addToHead (surplus ds)) $
+        set #outputsCovered outs sel
+      where
+        (ds, outs) = partition isDummy (view #outputsCovered sel)
+        isDummy = ((== dummyAddress) . view #address)
+
+        addToHead :: TokenBundle -> [TokenBundle] -> [TokenBundle]
+        addToHead _ []    = []
+        addToHead x (h:q) = TokenBundle.add x h : q
+
+        surplus = foldl' (flip TokenBundle.unsafeSubtract) extraValueSink
+            . map (view #tokens)
+
+above :: Coin -> Coin -> Coin
+above a b = fromMaybe (Coin 0) $ subtractCoin a b
 
 -- | Specifies all constraints required for coin selection.
 --

@@ -28,7 +28,7 @@ import Cardano.Wallet.Primitive.CoinSelection.Balance
     , fullBalance
     )
 import Cardano.Wallet.Primitive.Types.Coin
-    ( Coin (..) )
+    ( Coin (..), addCoin, scaleCoin )
 import Cardano.Wallet.Primitive.Types.Coin.Gen
     ( genCoin, shrinkCoin )
 import Cardano.Wallet.Primitive.Types.TokenMap
@@ -114,10 +114,15 @@ balanceSufficient SelectionParams{..} =
     balanceRequired =
         F.foldMap (view #tokens) outputsToCover
             <> TB.fromTokenMap assetsToBurn
+            <> TB.fromCoin (deposit certificateDepositsTaken)
     balanceAvailable =
         fullBalance utxoAvailable (Just extraCoinSource)
             <> TB.fromTokenMap assetsToMint
-    extraCoinSource = rewardWithdrawals
+    extraCoinSource = deposit certificateDepositsReturned
+        `addCoin` rewardWithdrawals
+
+deposit :: Integral n => n -> Coin
+deposit n = scaleCoin n (depositAmount testSelectionConstraints)
 
 testSelectionConstraints :: SelectionConstraints
 testSelectionConstraints = SelectionConstraints
