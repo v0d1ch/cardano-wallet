@@ -273,8 +273,10 @@ liftUpdates
     => Embedding da db
     -> [da] -- ^ List of deltas to apply. The 'head' is applied /last/.
     -> Base da -- ^ Base value to apply the deltas to.
-    -> (Base db, [db]) -- ^ (Final base value, updates that were applied).
-liftUpdates Embedding{inject} das a = go (inject a) a das
+    -> (Base db, [db])
+    -- ^ (Final base value, updates that were applied ('head' is /last/)).
+liftUpdates Embedding{inject} das a =
+    let (b,dbs) = go (inject a) a (reverse das) in (b, reverse dbs)
   where
     go machine1 !a [] = (state_ machine1, [])
     go machine1 !a (da:das) = (b,db:dbs)
