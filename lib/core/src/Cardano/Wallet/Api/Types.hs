@@ -2827,7 +2827,11 @@ instance EncodeAddress t => ToJSON (ApiPaymentDestination t) where
 instance DecodeAddress t => FromJSON (ApiConstructTransactionData t) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
 instance EncodeAddress t => ToJSON (ApiConstructTransactionData t) where
-    toJSON = genericToJSON defaultRecordTypeOptions
+    toJSON = genericToJSON Aeson.defaultOptions
+    -- { fieldLabelModifier = camelTo2 '_' . dropWhile (== '_')
+    -- , omitNothingFields = True
+    -- }
+
 
 instance DecodeAddress n => FromJSON (ApiExternalInput n) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
